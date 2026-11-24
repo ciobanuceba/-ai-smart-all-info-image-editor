@@ -1,0 +1,253 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { PDFDocument } from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { UploadCloud, MousePointer2, Eraser, Type, ImagePlus, Copy, ClipboardPaste, Trash2, Undo2, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+export default function PdfEditor() {
+  const [file, setFile] = useState(null);
+  const [pdfBytes, setPdfBytes] = useState(null);
+  const [pdfDoc, setPdfDoc] = useState(null);
+  const [pageCount, setPageCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [scale, setScale] = useState(1);
+  const [tool, setTool] = useState('select');
+  const [items, setItems] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [textValue, setTextValue] = useState('');
+  const [fontSize, setFontSize] = useState(18);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [drag, setDrag] = useState(null);
+  const [clipboard, setClipboard] = useState(null);
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+  const inputRef = useRef(null);
+  const imageRef = useRef(null);
+  const pageSize = useRef({ width: 612, height: 792 });
+  const pageItems = useMemo(() => items.filter(x => x.page === page), [items, page]);
+
+  useEffect(() => {
+    let live = true;
+    async function render() {
+      if (!pdfDoc || !canvasRef.current) return;
+      try {
+        const pdfPage = await pdfDoc.getPage(page);
+        const viewport = pdfPage.getViewport({ scale });
+        pageSize.current = { width: viewport.width / scale, height: viewport.height / scale };
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        canvas.style.width = viewport.width + 'px';
+        canvas.style.height = viewport.height + 'px';
+        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+        if (!live) return;
+      } catch (err) {
+        if (live) setMessage('এই PDF পৃষ্ঠাটি দেখানো যায়নি। অন্য PDF দিয়ে চেষ্টা করুন।');
+      }
+    }
+    render();
+    return () => { live = false; };
+  }, [pdfDoc, page, scale]);
+
+  const remember = (next) => {
+    setHistory(old => [...old.slice(-29), items]);
+    setItems(next);
+  };
+
+  const loadFile = async (f) => {
+    if (!f) return;
+    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
+      setMessage('অনুগ্রহ করে একটি PDF ফাইল নির্বাচন করুন।');
+      return;
+    }
+    setBusy(true); setMessage('');
+    try {
+      const bytes = await f.arrayBuffer();
+      const loaded = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+      setFile(f); setPdfBytes(bytes); setPdfDoc(loaded); setPageCount(loaded.numPages);
+      setPage(1); setItems([]); setHistory([]); setSelected(null);
+      setMessage('PDF খোলা হয়েছে। সম্পাদনা শুরু করতে টুল নির্বাচন করুন।');
+    } catch (err) {
+      setMessage('PDF খোলা যায়নি। ফাইলটি password-protected বা damaged হতে পারে।');
+    } finally { setBusy(false); }
+  };
+
+  const pointFromEvent = (e) => {
+    const rect = wrapRef.current.getBoundingClientRect();
+    return {
+      x: clamp((e.clientX - rect.left) / rect.width, 0, 1),
+      y: clamp((e.clientY - rect.top) / rect.height, 0, 1)
+    };
+  };
+
+  const onPointerDown = (e) => {
+    if (!pdfDoc || !wrapRef.current) return;
+    const p = pointFromEvent(e);
+    if (tool === 'cover') {
+      e.preventDefault();
+      wrapRef.current.setPointerCapture(e.pointerId);
+      setDrag({ start: p, current: p, kind: 'cover' });
+      return;
+    }
+    if (tool === 'text') {
+      if (!textValue.trim()) { setMessage('আগে Text box-এ লেখা লিখুন।'); return; }
+      const item = { id: uid(), page, type: 'text', x: p.x, y: p.y, w: 0.42, h: 0.07, text: textValue, fontSize: Number(fontSize) || 18, color: '#111111' };
+      remember([...items, item]); setSelected(item.id); setTool('select'); return;
+    }
+    if (tool === 'image') {
+      imageRef.current?.click();
+      setPendingImagePoint(p);
+      return;
+    }
+    const hit = [...pageItems].reverse().find(it => p.x >= it.x && p.x <= it.x + it.w && p.y >= it.y && p.y <= it.y + it.h);
+    setSelected(hit?.id || null);
+    if (hit) {
+      e.preventDefault();
+      wrapRef.current.setPointerCapture(e.pointerId);
+      setDrag({ kind: 'move', id: hit.id, offsetX: p.x - hit.x, offsetY: p.y - hit.y });
+    }
+  };
+
+  const [pendingImagePoint, setPendingImagePoint] = useState(null);
+  const onPointerMove = (e) => {
+    if (!drag || !wrapRef.current) return;
+    const p = pointFromEvent(e);
+    if (drag.kind === 'cover') setDrag(old => ({ ...old, current: p }));
+    if (drag.kind === 'move') {
+      const next = items.map(it => it.id === drag.id ? { ...it, x: clamp(p.x - drag.offsetX, 0, 1 - it.w), y: clamp(p.y - drag.offsetY, 0, 1 - it.h) } : it);
+      setItems(next);
+    }
+  };
+  const onPointerUp = () => {
+    if (!drag) return;
+    if (drag.kind === 'cover') {
+      const x = Math.min(drag.start.x, drag.current.x), y = Math.min(drag.start.y, drag.current.y);
+      const w = Math.abs(drag.current.x - drag.start.x), h = Math.abs(drag.current.y - drag.start.y);
+      if (w > 0.004 && h > 0.004) {
+        const item = { id: uid(), page, type: 'cover', x, y, w, h, color: '#ffffff' };
+        remember([...items, item]); setSelected(item.id);
+      }
+    } else if (drag.kind === 'move') {
+      setHistory(old => [...old.slice(-29), items]);
+    }
+    setDrag(null);
+  };
+
+  const addImage = async (f) => {
+    if (!f || !pendingImagePoint) return;
+    if (!f.type.startsWith('image/')) { setMessage('একটি image ফাইল নির্বাচন করুন।'); return; }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(f);
+    });
+    const img = new Image();
+    img.onload = () => {
+      const w = 0.24, h = Math.min(0.24 * img.height / img.width, 0.55);
+      const item = { id: uid(), page, type: 'image', x: clamp(pendingImagePoint.x, 0, 1-w), y: clamp(pendingImagePoint.y, 0, 1-h), w, h, dataUrl, mime: f.type };
+      remember([...items, item]); setSelected(item.id); setTool('select'); setPendingImagePoint(null); setMessage('ছবি যোগ হয়েছে। প্রয়োজন হলে টেনে সরান।');
+    };
+    img.onerror = () => setMessage('ছবিটি খোলা যায়নি।');
+    img.src = dataUrl;
+  };
+
+  const deleteSelected = () => {
+    if (!selected) return;
+    remember(items.filter(it => it.id !== selected)); setSelected(null);
+  };
+  const copySelected = () => {
+    const found = items.find(it => it.id === selected);
+    if (found) { setClipboard({ ...found }); setMessage('নির্বাচিত object কপি হয়েছে।'); }
+  };
+  const pasteItem = () => {
+    if (!clipboard) return;
+    const item = { ...clipboard, id: uid(), page, x: clamp(clipboard.x + 0.025, 0, 1 - clipboard.w), y: clamp(clipboard.y + 0.025, 0, 1 - clipboard.h) };
+    remember([...items, item]); setSelected(item.id);
+  };
+  const undo = () => {
+    if (!history.length) return;
+    setItems(history[history.length - 1]); setHistory(old => old.slice(0, -1)); setSelected(null);
+  };
+
+  const exportPdf = async () => {
+    if (!pdfBytes) return;
+    setBusy(true); setMessage('সম্পাদিত PDF তৈরি হচ্ছে…');
+    try {
+      const out = await PDFDocument.load(pdfBytes);
+      const pages = out.getPages();
+      for (const it of items) {
+        const target = pages[it.page - 1];
+        if (!target) continue;
+        const { width, height } = target.getSize();
+        const x = it.x * width, yTop = it.y * height, w = it.w * width, h = it.h * height;
+        if (it.type === 'cover') {
+          target.drawRectangle({ x, y: height - yTop - h, width: w, height: h, color: { type: 'RGB', red: 1, green: 1, blue: 1 } });
+        } else if (it.type === 'image') {
+          const bytes = await (await fetch(it.dataUrl)).arrayBuffer();
+          const embedded = it.mime === 'image/png' ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+          target.drawImage(embedded, { x, y: height - yTop - h, width: w, height: h });
+        } else if (it.type === 'text') {
+          const canvas = document.createElement('canvas');
+          const pxFont = Math.max(12, it.fontSize * 2);
+          const ctx = canvas.getContext('2d');
+          ctx.font = pxFont + 'px Arial, sans-serif';
+          const lines = String(it.text).split('\n');
+          const lineHeight = pxFont * 1.25;
+          const measured = Math.max(120, ...lines.map(line => ctx.measureText(line).width + 12));
+          canvas.width = Math.ceil(measured); canvas.height = Math.ceil(lineHeight * lines.length + 12);
+          const draw = canvas.getContext('2d');
+          draw.font = pxFont + 'px Arial, sans-serif'; draw.fillStyle = it.color || '#111111'; draw.textBaseline = 'top';
+          lines.forEach((line, i) => draw.fillText(line, 5, 5 + i * lineHeight));
+          const png = await out.embedPng(canvas.toDataURL('image/png'));
+          target.drawImage(png, { x, y: height - yTop - h, width: w, height: h });
+        }
+      }
+      const bytes = await out.save();
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = url; a.download = (file?.name || 'document.pdf').replace(/\.pdf$/i, '') + '-edited.pdf'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setMessage('সম্পাদিত PDF ডাউনলোড হয়েছে। মূল ফাইল অপরিবর্তিত আছে।');
+    } catch (err) {
+      setMessage('PDF তৈরি করা যায়নি: ' + (err?.message || 'অজানা সমস্যা'));
+    } finally { setBusy(false); }
+  };
+
+  const selectedItem = items.find(it => it.id === selected);
+  return <div className="pdf-editor">
+    <div className="pdf-editor-heading"><div><span className="pdf-editor-kicker">PDF WORKSPACE</span><h2>PDF Editor</h2><p>মূল PDF রেখে তার ওপর লেখা, ছবি ও whiteout যোগ করুন।</p></div>
+      {pdfDoc && <button className="pdf-save" onClick={exportPdf} disabled={busy}><Download size={16}/>{busy ? 'Working…' : 'Save & Download'}</button>}
+    </div>
+    {!pdfDoc ? <label className="pdf-upload"><input type="file" accept="application/pdf,.pdf" onChange={e => loadFile(e.target.files?.[0])} hidden/><UploadCloud size={30}/><b>{busy ? 'PDF খোলা হচ্ছে…' : 'PDF নির্বাচন করুন'}</b><span>আপনার ফোন বা কম্পিউটার থেকে PDF আপলোড করুন</span><small>ফাইল এই ব্রাউজারেই প্রসেস হবে</small></label> :
+    <>
+      <div className="pdf-toolbar">
+        <button className={tool==='select'?'chosen':''} onClick={()=>setTool('select')}><MousePointer2 size={16}/> Select / Move</button>
+        <button className={tool==='cover'?'chosen':''} onClick={()=>setTool('cover')}><Eraser size={16}/> Cover area</button>
+        <button className={tool==='text'?'chosen':''} onClick={()=>setTool('text')}><Type size={16}/> Add text</button>
+        <button className={tool==='image'?'chosen':''} onClick={()=>setTool('image')}><ImagePlus size={16}/> Add image</button>
+        <button onClick={copySelected} disabled={!selected}><Copy size={16}/> Copy</button>
+        <button onClick={pasteItem} disabled={!clipboard}><ClipboardPaste size={16}/> Paste</button>
+        <button onClick={undo} disabled={!history.length}><Undo2 size={16}/> Undo</button>
+        <button onClick={deleteSelected} disabled={!selected}><Trash2 size={16}/> Delete</button>
+      </div>
+      {tool==='text' && <div className="pdf-text-controls"><input value={textValue} onChange={e=>setTextValue(e.target.value)} placeholder="এখানে নতুন লেখা লিখুন"/><label>Size <input type="number" min="8" max="72" value={fontSize} onChange={e=>setFontSize(e.target.value)}/></label><span>তারপর পৃষ্ঠায় যেখানে বসাতে চান সেখানে ট্যাপ করুন।</span></div>}
+      <input ref={imageRef} type="file" accept="image/png,image/jpeg" hidden onChange={e=>addImage(e.target.files?.[0])}/>
+      <div className="pdf-page-controls"><button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}><ChevronLeft size={17}/></button><span>Page {page} / {pageCount}</span><button onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page>=pageCount}><ChevronRight size={17}/></button><i/><button onClick={()=>setScale(s=>Math.max(.55,s-.1))}><ZoomOut size={16}/></button><span>{Math.round(scale*100)}%</span><button onClick={()=>setScale(s=>Math.min(1.8,s+.1))}><ZoomIn size={16}/></button></div>
+      <div className="pdf-canvas-scroll"><div className="pdf-page-wrap" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+        <canvas ref={canvasRef}/>
+        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?'#fff':'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,it.fontSize*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
+        {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
+      </div></div>
+      <div className="pdf-editor-hint">{tool==='cover'?'মাউস/আঙুল দিয়ে টেনে যে অংশ ঢাকতে চান সেটি নির্বাচন করুন।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
+      {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} <button onClick={deleteSelected}>Remove</button></div>}
+    </>}
+    {message && <div className="pdf-editor-message">{message}</div>}
+    <div className="pdf-editor-note"><b>গুরুত্বপূর্ণ:</b> Cover area নির্বাচিত জায়গার ওপর সাদা অংশ বসায়; নিচের পুরোনো লেখা/ছবি PDF-এর ভেতরে থাকে। জটিল ব্যাকগ্রাউন্ড স্বয়ংক্রিয়ভাবে পুনর্গঠন করা হয় না। সম্পাদিত কপি ডাউনলোড হবে, আসল ফাইল বদলাবে না।</div>
+  </div>;
+}
