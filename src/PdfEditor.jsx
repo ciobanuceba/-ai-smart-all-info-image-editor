@@ -24,6 +24,8 @@ export default function PdfEditor() {
   const [fontSize, setFontSize] = useState(18);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [downloadName, setDownloadName] = useState('edited.pdf');
   const [drag, setDrag] = useState(null);
   const [clipboard, setClipboard] = useState(null);
   const canvasRef = useRef(null);
@@ -249,10 +251,13 @@ export default function PdfEditor() {
       }
       const bytes = await out.save();
       const blob = new Blob([bytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob); const a = document.createElement('a');
-      a.href = url; a.download = (file?.name || 'document.pdf').replace(/\.pdf$/i, '') + '-edited.pdf'; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
-      setMessage('সম্পাদিত PDF ডাউনলোড হয়েছে। মূল ফাইল অপরিবর্তিত আছে।');
+      const url = URL.createObjectURL(blob);
+      const name = (file?.name || 'document.pdf').replace(/\.pdf$/i, '') + '-edited.pdf';
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+      setDownloadUrl(url); setDownloadName(name);
+      const a = document.createElement('a'); a.href = url; a.download = name; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove();
+      setMessage('PDF তৈরি হয়েছে। স্বয়ংক্রিয়ভাবে ডাউনলোড না হলে নিচের Download edited PDF লিংকে চাপুন।');
     } catch (err) {
       setMessage('PDF তৈরি করা যায়নি: ' + (err?.message || 'অজানা সমস্যা'));
     } finally { setBusy(false); }
@@ -276,17 +281,19 @@ export default function PdfEditor() {
         <button onClick={deleteSelected} disabled={!selected}><Trash2 size={16}/> Delete</button>
       </div>
       {tool==='text' && <div className="pdf-text-controls"><input value={textValue} onChange={e=>setTextValue(e.target.value)} placeholder="এখানে নতুন লেখা লিখুন"/><label>Size <input type="number" min="8" max="72" value={fontSize} onChange={e=>setFontSize(e.target.value)}/></label><span>তারপর পৃষ্ঠায় যেখানে বসাতে চান সেখানে ট্যাপ করুন।</span></div>}
+      {selectedItem?.type === 'text' && <div className="pdf-text-controls"><input aria-label="Selected text" value={selectedItem.text} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,text:e.target.value}:it))}/><label>Size <input type="number" min="8" max="72" value={selectedItem.fontSize || 18} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,fontSize:Number(e.target.value)||18}:it))}/></label><span>নির্বাচিত লেখাটি এখানে পরিবর্তন করুন; Preview-তে দেখা যাবে।</span></div>}
       <input ref={imageRef} type="file" accept="image/png,image/jpeg" hidden onChange={e=>addImage(e.target.files?.[0])}/>
       <div className="pdf-page-controls"><button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}><ChevronLeft size={17}/></button><span>Page {page} / {pageCount}</span><button onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page>=pageCount}><ChevronRight size={17}/></button><i/><button onClick={()=>setScale(s=>Math.max(.55,s-.1))}><ZoomOut size={16}/></button><span>{Math.round(scale*100)}%</span><button onClick={()=>setScale(s=>Math.min(1.8,s+.1))}><ZoomIn size={16}/></button></div>
       <div className="pdf-canvas-scroll"><div className="pdf-page-wrap" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <canvas ref={canvasRef}/>
-        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?(it.color || '#ffffff'):'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,it.fontSize*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
+        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?(it.color || '#ffffff'):'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,(it.fontSize || 18)*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
         {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
       </div></div>
       <div className="pdf-editor-hint">{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
       {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} {selectedItem.type === 'cover' && <><label style={{display:'inline-flex',alignItems:'center',gap:8,marginLeft:12}}>Cover colour <input aria-label="Cover colour" type="color" value={selectedItem.color || '#ffffff'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><button onClick={()=>{setTool('select');setSampleColorMode(true);setMessage('PDF-এর Cover-এর বাইরের যে জায়গার রং নিতে চান, সেখানে ট্যাপ করুন।')}}>PDF থেকে রং নিন</button></>} <button onClick={deleteSelected}>Remove</button></div>}
     </>}
     {message && <div className="pdf-editor-message">{message}</div>}
+    {downloadUrl && <div className="pdf-editor-message"><a href={downloadUrl} download={downloadName} style={{color:'#ffffff',fontWeight:700}}>Download edited PDF</a></div>}
     <div className="pdf-editor-note"><b>গুরুত্বপূর্ণ:</b> Cover area নির্বাচিত জায়গার ওপর রঙের অংশ বসায়; নিচের পুরোনো লেখা/ছবি PDF-এর ভেতরে থাকে। জটিল ব্যাকগ্রাউন্ড স্বয়ংক্রিয়ভাবে পুনর্গঠন করা হয় না। সম্পাদিত কপি ডাউনলোড হবে, আসল ফাইল বদলাবে না।</div>
   </div>;
 }
