@@ -128,7 +128,7 @@ export default function PdfEditor() {
     }
     if (tool === 'text') {
       if (!textValue.trim()) { setMessage('আগে Text box-এ লেখা লিখুন।'); return; }
-      const item = { id: uid(), page, type: 'text', x: p.x, y: p.y, w: 0.42, h: 0.07, text: textValue, fontSize: Number(fontSize) || 18, color: '#111111' };
+      const item = { id: uid(), page, type: 'text', x: p.x, y: p.y, w: 0.42, h: 0.07, text: textValue, fontSize: Number(fontSize) || 18, color: '#111111', bold: false };
       remember([...items, item]); setSelected(item.id); setTool('select'); return;
     }
     if (tool === 'image') {
@@ -240,13 +240,13 @@ export default function PdfEditor() {
           const canvas = document.createElement('canvas');
           const pxFont = Math.max(12, it.fontSize * 2);
           const ctx = canvas.getContext('2d');
-          ctx.font = pxFont + 'px Arial, sans-serif';
+          ctx.font = (it.bold ? 'bold ' : '') + pxFont + 'px Arial, sans-serif';
           const lines = String(it.text).split('\n');
           const lineHeight = pxFont * 1.25;
           const measured = Math.max(120, ...lines.map(line => ctx.measureText(line).width + 12));
           canvas.width = Math.ceil(measured); canvas.height = Math.ceil(lineHeight * lines.length + 12);
           const draw = canvas.getContext('2d');
-          draw.font = pxFont + 'px Arial, sans-serif'; draw.fillStyle = it.color || '#111111'; draw.textBaseline = 'top';
+          draw.font = (it.bold ? 'bold ' : '') + pxFont + 'px Arial, sans-serif'; draw.fillStyle = it.color || '#111111'; draw.textBaseline = 'top';
           lines.forEach((line, i) => draw.fillText(line, 5, 5 + i * lineHeight));
           const png = await out.embedPng(canvas.toDataURL('image/png'));
           target.drawImage(png, { x, y: height - yTop - h, width: w, height: h });
@@ -282,12 +282,12 @@ export default function PdfEditor() {
         <button onClick={deleteSelected} disabled={!selected}><Trash2 size={16}/> Delete</button>
       </div>
       {tool==='text' && <div className="pdf-text-controls"><input value={textValue} onChange={e=>setTextValue(e.target.value)} placeholder="এখানে নতুন লেখা লিখুন"/><label>Size <input type="number" min="8" max="72" value={fontSize} onChange={e=>setFontSize(e.target.value)}/></label><span>তারপর পৃষ্ঠায় যেখানে বসাতে চান সেখানে ট্যাপ করুন।</span></div>}
-      {selectedItem?.type === 'text' && <div className="pdf-text-controls"><input aria-label="Selected text" value={selectedItem.text} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,text:e.target.value}:it))}/><label>Size <input type="number" min="8" max="72" value={selectedItem.fontSize || 18} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,fontSize:Number(e.target.value)||18}:it))}/></label><span>নির্বাচিত লেখাটি এখানে পরিবর্তন করুন; Preview-তে দেখা যাবে।</span></div>}
+      {selectedItem?.type === 'text' && <div className="pdf-text-controls"><input aria-label="Selected text" value={selectedItem.text} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,text:e.target.value}:it))}/><label>Size <input type="number" min="8" max="72" value={selectedItem.fontSize || 18} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,fontSize:Number(e.target.value)||18}:it))}/></label><label>Color <input aria-label="Text colour" type="color" value={selectedItem.color || '#111111'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><label style={{display:'inline-flex',alignItems:'center',gap:5}}>Bold <input type="checkbox" checked={!!selectedItem.bold} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,bold:e.target.checked}:it))}/></label><label>X % <input type="number" min="0" max="100" value={Math.round(selectedItem.x*100)} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,x:clamp((Number(e.target.value)||0)/100,0,1-it.w)}:it))}/></label><label>Y % <input type="number" min="0" max="100" value={Math.round(selectedItem.y*100)} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,y:clamp((Number(e.target.value)||0)/100,0,1-it.h)}:it))}/></label><span>লেখার রং, Bold ও পৃষ্ঠায় অবস্থান এখান থেকে বদলান; Preview-তে সঙ্গে সঙ্গে দেখা যাবে।</span></div>}
       <input ref={imageRef} type="file" accept="image/png,image/jpeg" hidden onChange={e=>addImage(e.target.files?.[0])}/>
       <div className="pdf-page-controls"><button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}><ChevronLeft size={17}/></button><span>Page {page} / {pageCount}</span><button onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page>=pageCount}><ChevronRight size={17}/></button><i/><button onClick={()=>setScale(s=>Math.max(.55,s-.1))}><ZoomOut size={16}/></button><span>{Math.round(scale*100)}%</span><button onClick={()=>setScale(s=>Math.min(1.8,s+.1))}><ZoomIn size={16}/></button></div>
       <div className="pdf-canvas-scroll"><div className="pdf-page-wrap" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <canvas ref={canvasRef}/>
-        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?(it.color || '#ffffff'):'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,(it.fontSize || 18)*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
+        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?(it.color || '#ffffff'):'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,(it.fontSize || 18)*scale*.72)+'px',fontWeight:it.bold?'700':'400',color:it.color || '#111111'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
         {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
       </div></div>
       <div className="pdf-editor-hint">{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
