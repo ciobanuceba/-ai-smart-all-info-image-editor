@@ -96,9 +96,25 @@ export default function PdfEditor() {
     };
   };
 
+  const [sampleColorMode, setSampleColorMode] = useState(false);
   const onPointerDown = (e) => {
     if (!pdfDoc || !wrapRef.current) return;
     const p = pointFromEvent(e);
+    if (sampleColorMode && selected) {
+      e.preventDefault();
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (ctx) {
+        try {
+          const pixel = ctx.getImageData(Math.min(canvas.width - 1, Math.max(0, Math.floor(p.x * canvas.width))), Math.min(canvas.height - 1, Math.max(0, Math.floor(p.y * canvas.height))), 1, 1).data;
+          const hex = '#' + [...pixel].slice(0, 3).map(v => v.toString(16).padStart(2, '0')).join('');
+          setItems(old => old.map(it => it.id === selected && it.type === 'cover' ? { ...it, color: hex } : it));
+          setMessage('PDF থেকে রং নেওয়া হয়েছে: ' + hex);
+        } catch (err) { setMessage('এই জায়গার রং নেওয়া যায়নি। আবার চেষ্টা করুন।'); }
+      }
+      setSampleColorMode(false);
+      return;
+    }
     if (tool === 'cover') {
       e.preventDefault();
       wrapRef.current.setPointerCapture(e.pointerId);
@@ -268,7 +284,7 @@ export default function PdfEditor() {
         {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
       </div></div>
       <div className="pdf-editor-hint">{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
-      {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} {selectedItem.type === 'cover' && <label style={{display:'inline-flex',alignItems:'center',gap:8,marginLeft:12}}>Cover colour <input aria-label="Cover colour" type="color" value={selectedItem.color || '#ffffff'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label>} <button onClick={deleteSelected}>Remove</button></div>}
+      {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} {selectedItem.type === 'cover' && <><label style={{display:'inline-flex',alignItems:'center',gap:8,marginLeft:12}}>Cover colour <input aria-label="Cover colour" type="color" value={selectedItem.color || '#ffffff'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><button onClick={()=>{setTool('select');setSampleColorMode(true);setMessage('PDF-এর Cover-এর বাইরের যে জায়গার রং নিতে চান, সেখানে ট্যাপ করুন।')}}>PDF থেকে রং নিন</button></>} <button onClick={deleteSelected}>Remove</button></div>}
     </>}
     {message && <div className="pdf-editor-message">{message}</div>}
     <div className="pdf-editor-note"><b>গুরুত্বপূর্ণ:</b> Cover area নির্বাচিত জায়গার ওপর রঙের অংশ বসায়; নিচের পুরোনো লেখা/ছবি PDF-এর ভেতরে থাকে। জটিল ব্যাকগ্রাউন্ড স্বয়ংক্রিয়ভাবে পুনর্গঠন করা হয় না। সম্পাদিত কপি ডাউনলোড হবে, আসল ফাইল বদলাবে না।</div>
