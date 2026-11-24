@@ -81,8 +81,11 @@ export default function PdfEditor() {
     setBusy(true); setMessage('');
     try {
       const bytes = await f.arrayBuffer();
-      const loaded = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
-      setFile(f); setPdfBytes(bytes); setPdfDoc(loaded); setPageCount(loaded.numPages);
+      // PDF.js may transfer/detach the buffer it receives. Keep a separate untouched copy for pdf-lib export.
+      const exportBytes = bytes.slice(0);
+      const previewBytes = bytes.slice(0);
+      const loaded = await pdfjsLib.getDocument({ data: new Uint8Array(previewBytes) }).promise;
+      setFile(f); setPdfBytes(exportBytes); setPdfDoc(loaded); setPageCount(loaded.numPages);
       setPage(1); setItems([]); setHistory([]); setSelected(null);
       setMessage('PDF খোলা হয়েছে। সম্পাদনা শুরু করতে টুল নির্বাচন করুন।');
     } catch (err) {
@@ -220,7 +223,7 @@ export default function PdfEditor() {
     if (!pdfBytes) return;
     setBusy(true); setMessage('সম্পাদিত PDF তৈরি হচ্ছে…');
     try {
-      const out = await PDFDocument.load(pdfBytes);
+      const out = await PDFDocument.load(pdfBytes.slice(0));
       const pages = out.getPages();
       for (const it of items) {
         const target = pages[it.page - 1];
