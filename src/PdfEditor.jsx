@@ -122,6 +122,11 @@ export default function PdfEditor() {
       wrapRef.current.setPointerCapture(e.pointerId);
       const nearCorner = p.x >= hit.x + hit.w - 0.055 && p.y >= hit.y + hit.h - 0.055;
       setDrag({ kind: nearCorner ? 'resize' : 'move', id: hit.id, offsetX: p.x - hit.x, offsetY: p.y - hit.y, startX: hit.x, startY: hit.y, startW: hit.w, startH: hit.h });
+    } else {
+      e.preventDefault();
+      wrapRef.current.setPointerCapture(e.pointerId);
+      const scroller = wrapRef.current.parentElement;
+      setDrag({ kind: 'pan', startClientX: e.clientX, startClientY: e.clientY, startScrollLeft: scroller.scrollLeft, startScrollTop: scroller.scrollTop });
     }
   };
 
@@ -130,6 +135,11 @@ export default function PdfEditor() {
     if (!drag || !wrapRef.current) return;
     const p = pointFromEvent(e);
     if (drag.kind === 'cover') setDrag(old => ({ ...old, current: p }));
+    if (drag.kind === 'pan') {
+      const scroller = wrapRef.current.parentElement;
+      scroller.scrollLeft = drag.startScrollLeft - (e.clientX - drag.startClientX);
+      scroller.scrollTop = drag.startScrollTop - (e.clientY - drag.startClientY);
+    }
     if (drag.kind === 'move') {
       const next = items.map(it => it.id === drag.id ? { ...it, x: clamp(p.x - drag.offsetX, 0, 1 - it.w), y: clamp(p.y - drag.offsetY, 0, 1 - it.h) } : it);
       setItems(next);
@@ -146,7 +156,7 @@ export default function PdfEditor() {
       const w = Math.abs(drag.current.x - drag.start.x), h = Math.abs(drag.current.y - drag.start.y);
       if (w > 0.004 && h > 0.004) {
         const item = { id: uid(), page, type: 'cover', x, y, w, h, color: '#ffffff' };
-        remember([...items, item]); setSelected(item.id);
+        remember([...items, item]); setSelected(item.id); setTool('select');
       }
     } else if (drag.kind === 'move' || drag.kind === 'resize') {
       setHistory(old => [...old.slice(-29), items]);
