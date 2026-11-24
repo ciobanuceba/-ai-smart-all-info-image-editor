@@ -1,6 +1,6 @@
 {
   "name": "ai-smart-all-info-editor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "lucide-react": "^0.468.0",
-    "pdf-lib": "^1.17.1"
-  },
-  "devDependencies": {}
+    "pdf-lib": "^1.17.1",
+    "jszip": "^3.10.1",
+    "tesseract.js": "^6.0.1"
+  }
 }
