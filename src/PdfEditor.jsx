@@ -210,7 +210,7 @@ export default function PdfEditor() {
         const { width, height } = target.getSize();
         const x = it.x * width, yTop = it.y * height, w = it.w * width, h = it.h * height;
         if (it.type === 'cover') {
-          target.drawRectangle({ x, y: height - yTop - h, width: w, height: h, color: { type: 'RGB', red: 1, green: 1, blue: 1 } });
+          target.drawRectangle({ x, y: height - yTop - h, width: w, height: h, color: (() => { const hex = (it.color || '#ffffff').replace('#', ''); return { type: 'RGB', red: parseInt(hex.slice(0,2),16)/255, green: parseInt(hex.slice(2,4),16)/255, blue: parseInt(hex.slice(4,6),16)/255 }; })() });
         } else if (it.type === 'image') {
           const bytes = await (await fetch(it.dataUrl)).arrayBuffer();
           const embedded = it.mime === 'image/png' ? await out.embedPng(bytes) : await out.embedJpg(bytes);
@@ -264,13 +264,13 @@ export default function PdfEditor() {
       <div className="pdf-page-controls"><button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}><ChevronLeft size={17}/></button><span>Page {page} / {pageCount}</span><button onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page>=pageCount}><ChevronRight size={17}/></button><i/><button onClick={()=>setScale(s=>Math.max(.55,s-.1))}><ZoomOut size={16}/></button><span>{Math.round(scale*100)}%</span><button onClick={()=>setScale(s=>Math.min(1.8,s+.1))}><ZoomIn size={16}/></button></div>
       <div className="pdf-canvas-scroll"><div className="pdf-page-wrap" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <canvas ref={canvasRef}/>
-        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?'#fff':'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,it.fontSize*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
+        {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?(it.color || '#ffffff'):'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,it.fontSize*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
         {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
       </div></div>
       <div className="pdf-editor-hint">{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
-      {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} <button onClick={deleteSelected}>Remove</button></div>}
+      {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} {selectedItem.type === 'cover' && <label style={{display:'inline-flex',alignItems:'center',gap:8,marginLeft:12}}>Cover colour <input aria-label="Cover colour" type="color" value={selectedItem.color || '#ffffff'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label>} <button onClick={deleteSelected}>Remove</button></div>}
     </>}
     {message && <div className="pdf-editor-message">{message}</div>}
-    <div className="pdf-editor-note"><b>গুরুত্বপূর্ণ:</b> Cover area নির্বাচিত জায়গার ওপর সাদা অংশ বসায়; নিচের পুরোনো লেখা/ছবি PDF-এর ভেতরে থাকে। জটিল ব্যাকগ্রাউন্ড স্বয়ংক্রিয়ভাবে পুনর্গঠন করা হয় না। সম্পাদিত কপি ডাউনলোড হবে, আসল ফাইল বদলাবে না।</div>
+    <div className="pdf-editor-note"><b>গুরুত্বপূর্ণ:</b> Cover area নির্বাচিত জায়গার ওপর রঙের অংশ বসায়; নিচের পুরোনো লেখা/ছবি PDF-এর ভেতরে থাকে। জটিল ব্যাকগ্রাউন্ড স্বয়ংক্রিয়ভাবে পুনর্গঠন করা হয় না। সম্পাদিত কপি ডাউনলোড হবে, আসল ফাইল বদলাবে না।</div>
   </div>;
 }
