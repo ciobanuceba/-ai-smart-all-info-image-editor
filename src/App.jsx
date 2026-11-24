@@ -11,7 +11,9 @@ const tools = [
  {id:'ocr',name:'Image to text (OCR)',desc:'Recognize text in a photo or scanned image.',icon:ScanText,tag:'SMART TOOL'},
  {id:'info',name:'PDF information',desc:'Check page count and document details.',icon:FileText,tag:'PDF TOOL'}
 ];
+function AdminLogin(){return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:20,background:'#0c1422',color:'#eef'}}><section style={{width:'min(100%,420px)',padding:28,background:'#111d2e',border:'1px solid #30415c',borderRadius:16}}><a href='/' style={{color:'#a9a0ff'}}>← Back to tools</a><h1>Admin login</h1><p>Admin access is being connected securely. Please do not enter a real password yet.</p><label>Email<input type='email' placeholder='Admin email' style={{display:'block',width:'100%',padding:12,margin:'8px 0 18px'}} /></label><label>Password<input type='password' placeholder='Password' style={{display:'block',width:'100%',padding:12,margin:'8px 0 18px'}} /></label><button type='button' onClick={()=>alert('Secure admin authentication is not active yet.')} style={{width:'100%',padding:12,background:'#8178ef',color:'white',border:0,borderRadius:8}}>Sign in</button></section></main>;}
 export default function App(){
+ if(window.location.pathname==='/admin') return <AdminLogin/>;
  const [active,setActive]=useState('merge'),[files,setFiles]=useState([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[mobile,setMobile]=useState(false),[pageRange,setPageRange]=useState('1'),[ocrText,setOcrText]=useState('');
  const picker=useRef(null);
  const current=tools.find(t=>t.id===active)||tools[0];
