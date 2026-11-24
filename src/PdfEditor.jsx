@@ -258,9 +258,7 @@ export default function PdfEditor() {
       const name = (file?.name || 'document.pdf').replace(/\.pdf$/i, '') + '-edited.pdf';
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
       setDownloadUrl(url); setDownloadName(name);
-      const a = document.createElement('a'); a.href = url; a.download = name; a.style.display = 'none';
-      document.body.appendChild(a); a.click(); a.remove();
-      setMessage('PDF তৈরি হয়েছে। স্বয়ংক্রিয়ভাবে ডাউনলোড না হলে নিচের Download edited PDF লিংকে চাপুন।');
+      setMessage('সম্পাদিত PDF-এর Preview তৈরি হয়েছে। ভালোভাবে দেখে তারপর Download চাপুন।');
     } catch (err) {
       setMessage('PDF তৈরি করা যায়নি: ' + (err?.message || 'অজানা সমস্যা'));
     } finally { setBusy(false); }
@@ -296,7 +294,14 @@ export default function PdfEditor() {
       {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} {selectedItem.type === 'cover' && <><label style={{display:'inline-flex',alignItems:'center',gap:8,marginLeft:12}}>Cover colour <input aria-label="Cover colour" type="color" value={selectedItem.color || '#ffffff'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><button onClick={()=>{setTool('select');setSampleColorMode(true);setMessage('PDF-এর Cover-এর বাইরের যে জায়গার রং নিতে চান, সেখানে ট্যাপ করুন।')}}>PDF থেকে রং নিন</button></>} <button onClick={deleteSelected}>Remove</button></div>}
     </>}
     {message && <div className="pdf-editor-message">{message}</div>}
-    {downloadUrl && <div className="pdf-editor-message"><a href={downloadUrl} download={downloadName} style={{color:'#ffffff',fontWeight:700}}>Download edited PDF</a></div>}
+    {downloadUrl && <section className="pdf-export-preview" style={{marginTop:16,padding:12,border:'1px solid #7775',borderRadius:12}}>
+      <h3 style={{margin:'0 0 10px'}}>সম্পাদিত PDF Preview</h3>
+      <iframe title="Edited PDF preview" src={downloadUrl} style={{width:'100%',height:'70vh',minHeight:420,border:'1px solid #888',borderRadius:8,background:'#fff'}}/>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:12}}>
+        <a href={downloadUrl} target="_blank" rel="noreferrer" style={{padding:'10px 14px',border:'1px solid currentColor',borderRadius:8}}>নতুন ট্যাবে Preview</a>
+        <a href={downloadUrl} download={downloadName} style={{padding:'10px 14px',background:'#6256d9',color:'#fff',borderRadius:8,fontWeight:700}}>Download edited PDF</a>
+      </div>
+    </section>}
     <div className="pdf-editor-note"><b>গুরুত্বপূর্ণ:</b> Cover area নির্বাচিত জায়গার ওপর রঙের অংশ বসায়; নিচের পুরোনো লেখা/ছবি PDF-এর ভেতরে থাকে। জটিল ব্যাকগ্রাউন্ড স্বয়ংক্রিয়ভাবে পুনর্গঠন করা হয় না। সম্পাদিত কপি ডাউনলোড হবে, আসল ফাইল বদলাবে না।</div>
   </div>;
 }
