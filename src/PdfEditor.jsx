@@ -120,7 +120,8 @@ export default function PdfEditor() {
     if (hit) {
       e.preventDefault();
       wrapRef.current.setPointerCapture(e.pointerId);
-      setDrag({ kind: 'move', id: hit.id, offsetX: p.x - hit.x, offsetY: p.y - hit.y });
+      const nearCorner = p.x >= hit.x + hit.w - 0.055 && p.y >= hit.y + hit.h - 0.055;
+      setDrag({ kind: nearCorner ? 'resize' : 'move', id: hit.id, offsetX: p.x - hit.x, offsetY: p.y - hit.y, startX: hit.x, startY: hit.y, startW: hit.w, startH: hit.h });
     }
   };
 
@@ -133,6 +134,10 @@ export default function PdfEditor() {
       const next = items.map(it => it.id === drag.id ? { ...it, x: clamp(p.x - drag.offsetX, 0, 1 - it.w), y: clamp(p.y - drag.offsetY, 0, 1 - it.h) } : it);
       setItems(next);
     }
+    if (drag.kind === 'resize') {
+      const next = items.map(it => it.id === drag.id ? { ...it, w: clamp(p.x - drag.startX, 0.025, 1 - drag.startX), h: clamp(p.y - drag.startY, 0.018, 1 - drag.startY) } : it);
+      setItems(next);
+    }
   };
   const onPointerUp = () => {
     if (!drag) return;
@@ -143,7 +148,7 @@ export default function PdfEditor() {
         const item = { id: uid(), page, type: 'cover', x, y, w, h, color: '#ffffff' };
         remember([...items, item]); setSelected(item.id);
       }
-    } else if (drag.kind === 'move') {
+    } else if (drag.kind === 'move' || drag.kind === 'resize') {
       setHistory(old => [...old.slice(-29), items]);
     }
     setDrag(null);
@@ -252,7 +257,7 @@ export default function PdfEditor() {
         {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?'#fff':'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,it.fontSize*scale*.72)+'px'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
         {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
       </div></div>
-      <div className="pdf-editor-hint">{tool==='cover'?'মাউস/আঙুল দিয়ে টেনে যে অংশ ঢাকতে চান সেটি নির্বাচন করুন।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
+      <div className="pdf-editor-hint">{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
       {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} <button onClick={deleteSelected}>Remove</button></div>}
     </>}
     {message && <div className="pdf-editor-message">{message}</div>}
