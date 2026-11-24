@@ -45,6 +45,19 @@ export default function App(){
     const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;canvas.getContext('2d').drawImage(img,0,0);
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('Image convert করা যায়নি।');
     download(blob,(f.name.replace(/\.[^.]+$/,'')||'image')+'.png');URL.revokeObjectURL(url);setNotice('PNG image তৈরি হয়েছে।');
+   }else if(active==='imagepdf'){
+    const out=await PDFDocument.create();
+    for(const f of files){
+     const bytes=await f.arrayBuffer();
+     const img=f.type==='image/png'?await out.embedPng(bytes):(f.type==='image/jpeg'||f.type==='image/jpg')?await out.embedJpg(bytes):null;
+     if(!img)throw new Error('শুধু JPG বা PNG ফাইল দিন।');
+     const page=out.addPage([img.width,img.height]);page.drawImage(img,{x:0,y:0,width:img.width,height:img.height});
+    }
+    download(new Blob([await out.save()],{type:'application/pdf'}),'images-to-pdf.pdf');setNotice('ছবিগুলো PDF-এ রূপান্তর হয়েছে।');
+   }else if(active==='rotate'){
+    const doc=await PDFDocument.load(await files[0].arrayBuffer());
+    doc.getPages().forEach(p=>p.setRotation({angle:(p.getRotation().angle+90)%360}));
+    download(new Blob([await doc.save()],{type:'application/pdf'}),'rotated-document.pdf');setNotice('PDF পৃষ্ঠাগুলো ৯০ ডিগ্রি ঘোরানো হয়েছে।');
    }else if(active==='ocr'){
     const worker=await createWorker('eng');try{const result=await worker.recognize(files[0]);setOcrText(result.data.text||'কোনো লেখা পাওয়া যায়নি।');setNotice('ছবির লেখা শনাক্ত করা হয়েছে।')}finally{await worker.terminate();}
    }else{
