@@ -42,12 +42,20 @@ export default function PdfEditor() {
         const viewport = pdfPage.getViewport({ scale });
         pageSize.current = { width: viewport.width / scale, height: viewport.height / scale };
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
+        const ctx = canvas.getContext('2d', { alpha: false });
+        // Render above the display size so text stays sharp on high-DPI phones.
+        const outputScale = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
+        canvas.width = Math.ceil(viewport.width * outputScale);
+        canvas.height = Math.ceil(viewport.height * outputScale);
         canvas.style.width = viewport.width + 'px';
         canvas.style.height = viewport.height + 'px';
-        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+        ctx.imageSmoothingEnabled = true;
+        await pdfPage.render({
+          canvasContext: ctx,
+          viewport,
+          transform: [outputScale, 0, 0, outputScale, 0, 0],
+          intent: 'display'
+        }).promise;
         if (!live) return;
       } catch (err) {
         if (live) setMessage('এই PDF পৃষ্ঠাটি দেখানো যায়নি। অন্য PDF দিয়ে চেষ্টা করুন।');
