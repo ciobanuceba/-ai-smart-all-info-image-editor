@@ -10,3 +10,16 @@
 
 .pdf-overlay.is-selected::after{content:'';position:absolute;right:0;bottom:0;width:20px;height:20px;border-radius:50%;background:#796df2;border:2px solid #fff;box-shadow:0 1px 5px #0008;pointer-events:none}
 @media(max-width:650px){.pdf-page-wrap{touch-action:none}.pdf-overlay.is-selected::after{width:24px;height:24px}}
+
+
+/* Original PDF text hit targets: transparent until selected, while preserving the rendered page. */
+.pdf-original-text-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
+.pdf-original-text-hit{position:absolute;pointer-events:auto;background:transparent;border:1px solid transparent;border-radius:2px;cursor:text;touch-action:manipulation}
+.pdf-original-text-hit:hover{background:#9a91ff18;border-color:#9a91ff66}
+.pdf-original-text-hit.is-original-selected{background:#8178ef35;border:2px solid #a49aff;box-shadow:0 0 0 1px #0c1422}
+.pdf-overlay{z-index:2}
+.pdf-original-controls{padding:10px;border:1px solid #514b87;border-radius:9px;background:#191f39}
+.pdf-original-controls>b{color:#d8d2ff}
+.pdf-original-controls button{padding:8px 10px;border:1px solid #514b87;border-radius:7px;background:#302e5b;color:#fff;font-size:11px;cursor:pointer}
+.pdf-original-controls button:last-of-type{background:#26364d;border-color:#40516d}
+@media(max-width:650px){.pdf-original-text-hit{border-width:1px}.pdf-original-controls button{width:100%;justify-content:center}}
