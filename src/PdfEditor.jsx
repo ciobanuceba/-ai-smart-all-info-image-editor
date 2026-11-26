@@ -22,6 +22,7 @@ export default function PdfEditor() {
   const [selected, setSelected] = useState(null);
   const [textValue, setTextValue] = useState('');
   const [fontSize, setFontSize] = useState(18);
+  const [textColor, setTextColor] = useState('#111111');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
@@ -159,7 +160,7 @@ export default function PdfEditor() {
     }
     if (tool === 'text') {
       if (!textValue.trim()) { setMessage('আগে Text box-এ লেখা লিখুন।'); return; }
-      const item = { id: uid(), page, type: 'text', x: p.x, y: p.y, w: 0.42, h: 0.07, text: textValue, fontSize: Number(fontSize) || 18, color: '#111111', bold: false };
+      const item = { id: uid(), page, type: 'text', x: p.x, y: p.y, w: 0.42, h: 0.07, text: textValue, fontSize: Number(fontSize) || 18, color: textColor || '#111111', bold: false };
       remember([...items, item]); setSelected(item.id); setTool('select'); return;
     }
     if (tool === 'image') {
@@ -343,7 +344,7 @@ export default function PdfEditor() {
         <button onClick={undo} disabled={!history.length}><Undo2 size={16}/> Undo</button>
         <button onClick={deleteSelected} disabled={!selected}><Trash2 size={16}/> Delete</button>
       </div>
-      {tool==='text' && <div className="pdf-text-controls"><input value={textValue} onChange={e=>setTextValue(e.target.value)} placeholder="এখানে নতুন লেখা লিখুন"/><label>Size <input type="number" min="8" max="72" value={fontSize} onChange={e=>setFontSize(e.target.value)}/></label><span>তারপর পৃষ্ঠায় যেখানে বসাতে চান সেখানে ট্যাপ করুন।</span></div>}
+      {tool==='text' && <div className="pdf-text-controls"><input value={textValue} onChange={e=>setTextValue(e.target.value)} placeholder="এখানে নতুন লেখা লিখুন"/><label>Size <input type="number" min="8" max="72" value={fontSize} onChange={e=>setFontSize(e.target.value)}/></label><label>Text color <input aria-label="New text colour" type="color" value={textColor} onChange={e=>setTextColor(e.target.value)}/></label><span>লেখার রং বেছে নিয়ে তারপর পৃষ্ঠায় যেখানে বসাতে চান সেখানে ট্যাপ করুন।</span></div>}
       {selectedItem?.type === 'text' && <div className="pdf-text-controls"><input aria-label="Selected text" value={selectedItem.text} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,text:e.target.value}:it))}/><label>Size <input type="number" min="8" max="72" value={selectedItem.fontSize || 18} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,fontSize:Number(e.target.value)||18}:it))}/></label><label>Color <input aria-label="Text colour" type="color" value={selectedItem.color || '#111111'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><label style={{display:'inline-flex',alignItems:'center',gap:5}}>Bold <input type="checkbox" checked={!!selectedItem.bold} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,bold:e.target.checked}:it))}/></label><label>X % <input type="number" min="0" max="100" value={Math.round(selectedItem.x*100)} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,x:clamp((Number(e.target.value)||0)/100,0,1-it.w)}:it))}/></label><label>Y % <input type="number" min="0" max="100" value={Math.round(selectedItem.y*100)} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,y:clamp((Number(e.target.value)||0)/100,0,1-it.h)}:it))}/></label><span>লেখার রং, Bold ও পৃষ্ঠায় অবস্থান এখান থেকে বদলান; Preview-তে সঙ্গে সঙ্গে দেখা যাবে।</span></div>}
       <input ref={imageRef} type="file" accept="image/png,image/jpeg" hidden onChange={e=>addImage(e.target.files?.[0])}/>
       <div className="pdf-page-controls"><button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}><ChevronLeft size={17}/></button><span>Page {page} / {pageCount}</span><button onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page>=pageCount}><ChevronRight size={17}/></button><i/><button onClick={()=>setScale(s=>Math.max(.55,s-.1))}><ZoomOut size={16}/></button><span>{Math.round(scale*100)}%</span><button onClick={()=>setScale(s=>Math.min(1.8,s+.1))}><ZoomIn size={16}/></button></div>
