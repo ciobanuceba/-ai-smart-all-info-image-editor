@@ -28,6 +28,12 @@ export default function PdfEditor() {
   const [downloadName, setDownloadName] = useState('edited.pdf');
   const [drag, setDrag] = useState(null);
   const [clipboard, setClipboard] = useState(null);
+  const [originalTextItems, setOriginalTextItems] = useState([]);
+  const [originalSelected, setOriginalSelected] = useState(null);
+  const [originalTextValue, setOriginalTextValue] = useState('');
+  const [originalTextColor, setOriginalTextColor] = useState('#d11f35');
+  const [originalCoverColor, setOriginalCoverColor] = useState('#ffffff');
+  const [originalFontSize, setOriginalFontSize] = useState(12);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
@@ -58,7 +64,26 @@ export default function PdfEditor() {
           transform: [outputScale, 0, 0, outputScale, 0, 0],
           intent: 'display'
         }).promise;
+        const textContent = await pdfPage.getTextContent();
+        const selectableText = textContent.items
+          .filter(item => typeof item.str === 'string' && item.str.trim() && item.transform)
+          .map((item, index) => {
+            const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+            const textHeight = Math.max(6, Math.hypot(tx[2], tx[3]));
+            const left = tx[4];
+            const top = tx[5] - textHeight;
+            const textWidth = Math.max(5, item.width * scale);
+            return {
+              id: 'pdf-text-' + page + '-' + index,
+              text: item.str,
+              x: clamp(left / viewport.width, 0, 1),
+              y: clamp(top / viewport.height, 0, 1),
+              w: clamp(textWidth / viewport.width, 0.006, 1),
+              h: clamp(textHeight / viewport.height, 0.008, 0.2)
+            };
+          });
         if (!live) return;
+        setOriginalTextItems(selectableText);
       } catch (err) {
         if (live) setMessage('এই PDF পৃষ্ঠাটি দেখানো যায়নি। অন্য PDF দিয়ে চেষ্টা করুন।');
       }
@@ -87,6 +112,7 @@ export default function PdfEditor() {
       const loaded = await pdfjsLib.getDocument({ data: new Uint8Array(previewBytes) }).promise;
       setFile(f); setPdfBytes(exportBytes); setPdfDoc(loaded); setPageCount(loaded.numPages);
       setPage(1); setItems([]); setHistory([]); setSelected(null);
+      setOriginalTextItems([]); setOriginalSelected(null); setOriginalTextValue('');
       setMessage('PDF খোলা হয়েছে। সম্পাদনা শুরু করতে টুল নির্বাচন করুন।');
     } catch (err) {
       setMessage('PDF খোলা যায়নি। ফাইলটি password-protected বা damaged হতে পারে।');
@@ -183,6 +209,37 @@ export default function PdfEditor() {
       setHistory(old => [...old.slice(-29), items]);
     }
     setDrag(null);
+  };
+
+  const applyOriginalTextEdit = (coverOnly = false) => {
+    if (!originalSelected) return;
+    const cover = {
+      id: uid(), page, type: 'cover',
+      x: originalSelected.x, y: originalSelected.y,
+      w: originalSelected.w, h: originalSelected.h,
+      color: originalCoverColor || '#ffffff'
+    };
+    const nextItems = [...items, cover];
+    if (!coverOnly) {
+      const replacement = {
+        id: uid(), page, type: 'text',
+        x: originalSelected.x, y: originalSelected.y,
+        w: originalSelected.w, h: originalSelected.h,
+        text: originalTextValue || originalSelected.text,
+        fontSize: Number(originalFontSize) || Math.max(8, Math.round(originalSelected.h * pageSize.current.height * 0.8)),
+        color: originalTextColor || '#111111',
+        bold: false
+      };
+      nextItems.push(replacement);
+      setSelected(replacement.id);
+      setMessage('নির্বাচিত PDF লেখা কভার করে নতুন রঙের লেখা বসানো হয়েছে। প্রয়োজনে নতুন লেখাটি Resize করুন।');
+    } else {
+      setSelected(cover.id);
+      setMessage('নির্বাচিত PDF লেখাটি কভার করা হয়েছে।');
+    }
+    remember(nextItems);
+    setOriginalSelected(null);
+    setOriginalTextValue('');
   };
 
   const addImage = async (f) => {
@@ -282,15 +339,36 @@ export default function PdfEditor() {
         <button onClick={deleteSelected} disabled={!selected}><Trash2 size={16}/> Delete</button>
       </div>
       {tool==='text' && <div className="pdf-text-controls"><input value={textValue} onChange={e=>setTextValue(e.target.value)} placeholder="এখানে নতুন লেখা লিখুন"/><label>Size <input type="number" min="8" max="72" value={fontSize} onChange={e=>setFontSize(e.target.value)}/></label><span>তারপর পৃষ্ঠায় যেখানে বসাতে চান সেখানে ট্যাপ করুন।</span></div>}
+      {originalSelected && <div className="pdf-text-controls pdf-original-controls">
+        <b>মূল PDF লেখা নির্বাচন করেছেন</b>
+        <input aria-label="Replace original PDF text" value={originalTextValue} onChange={e=>setOriginalTextValue(e.target.value)} placeholder="নতুন লেখা লিখুন"/>
+        <label>Text color <input aria-label="Original text colour" type="color" value={originalTextColor} onChange={e=>setOriginalTextColor(e.target.value)}/></label>
+        <label>Cover color <input aria-label="Background cover colour" type="color" value={originalCoverColor} onChange={e=>setOriginalCoverColor(e.target.value)}/></label>
+        <label>Size <input type="number" min="8" max="72" value={originalFontSize} onChange={e=>setOriginalFontSize(Number(e.target.value)||8)}/></label>
+        <button type="button" onClick={()=>applyOriginalTextEdit(false)}>রং পরিবর্তন / নতুন লেখা বসান</button>
+        <button type="button" onClick={()=>applyOriginalTextEdit(true)}>শুধু Cover করুন</button>
+        <button type="button" onClick={()=>setOriginalSelected(null)}>Cancel</button>
+        <span>PDF-এর শনাক্ত করা টেক্সট অংশ নির্বাচন হয়েছে। Cover color দিয়ে পেছনের অংশের রং মিলিয়ে নিন।</span>
+      </div>}
       {selectedItem?.type === 'text' && <div className="pdf-text-controls"><input aria-label="Selected text" value={selectedItem.text} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,text:e.target.value}:it))}/><label>Size <input type="number" min="8" max="72" value={selectedItem.fontSize || 18} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,fontSize:Number(e.target.value)||18}:it))}/></label><label>Color <input aria-label="Text colour" type="color" value={selectedItem.color || '#111111'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><label style={{display:'inline-flex',alignItems:'center',gap:5}}>Bold <input type="checkbox" checked={!!selectedItem.bold} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,bold:e.target.checked}:it))}/></label><label>X % <input type="number" min="0" max="100" value={Math.round(selectedItem.x*100)} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,x:clamp((Number(e.target.value)||0)/100,0,1-it.w)}:it))}/></label><label>Y % <input type="number" min="0" max="100" value={Math.round(selectedItem.y*100)} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,y:clamp((Number(e.target.value)||0)/100,0,1-it.h)}:it))}/></label><span>লেখার রং, Bold ও পৃষ্ঠায় অবস্থান এখান থেকে বদলান; Preview-তে সঙ্গে সঙ্গে দেখা যাবে।</span></div>}
       <input ref={imageRef} type="file" accept="image/png,image/jpeg" hidden onChange={e=>addImage(e.target.files?.[0])}/>
       <div className="pdf-page-controls"><button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page<=1}><ChevronLeft size={17}/></button><span>Page {page} / {pageCount}</span><button onClick={()=>setPage(p=>Math.min(pageCount,p+1))} disabled={page>=pageCount}><ChevronRight size={17}/></button><i/><button onClick={()=>setScale(s=>Math.max(.55,s-.1))}><ZoomOut size={16}/></button><span>{Math.round(scale*100)}%</span><button onClick={()=>setScale(s=>Math.min(1.8,s+.1))}><ZoomIn size={16}/></button></div>
       <div className="pdf-canvas-scroll"><div className="pdf-page-wrap" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <canvas ref={canvasRef}/>
+        <div className="pdf-original-text-layer">
+          {originalTextItems.map(txt => <div
+            key={txt.id}
+            className={'pdf-original-text-hit ' + (originalSelected?.id === txt.id ? 'is-original-selected' : '')}
+            title={txt.text}
+            style={{left:(txt.x*100)+'%',top:(txt.y*100)+'%',width:(txt.w*100)+'%',height:(txt.h*100)+'%'}}
+            onPointerDown={e=>{e.preventDefault();e.stopPropagation();setOriginalSelected(txt);setOriginalTextValue(txt.text);setOriginalFontSize(Math.max(8,Math.min(72,Math.round(txt.h*pageSize.current.height*.8))));setSelected(null);}}
+          />
+          )}
+        </div>
         {pageItems.map(it => <div key={it.id} className={'pdf-overlay '+(selected===it.id?'is-selected':'')} style={{left:(it.x*100)+'%',top:(it.y*100)+'%',width:(it.w*100)+'%',height:(it.h*100)+'%',background:it.type==='cover'?(it.color || '#ffffff'):'transparent',border: selected===it.id?'2px solid #796df2':it.type==='cover'?'1px dashed #aaa':'1px dashed #796df2',color:'#111',fontSize:Math.max(9,(it.fontSize || 18)*scale*.72)+'px',fontWeight:it.bold?'700':'400',color:it.color || '#111111'}}>{it.type==='text'?it.text:it.type==='image'?<img src={it.dataUrl} alt="Added image"/>:null}</div>)}
         {drag?.kind==='cover'&&<div className="pdf-cover-preview" style={{left:Math.min(drag.start.x,drag.current.x)*100+'%',top:Math.min(drag.start.y,drag.current.y)*100+'%',width:Math.abs(drag.current.x-drag.start.x)*100+'%',height:Math.abs(drag.current.y-drag.start.y)*100+'%'}}/>}
       </div></div>
-      <div className="pdf-editor-hint">{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'কোনো যোগ করা লেখা/ছবি/কভার ট্যাপ করে নির্বাচন করুন, তারপর সরান বা কপি করুন।'}</div>
+      <div className="pdf-editor-hint">{originalSelected?'মূল PDF-এর নির্বাচিত লেখা পরিবর্তন করতে উপরের Color ও Cover controls ব্যবহার করুন। ':''}{tool==='cover'?'আঙুল চেপে ধরে টেনে কভার আঁকুন। তৈরি হলে নিচের ডান কোণার হ্যান্ডেল টেনে আকার বদলান, মাঝখান ধরে সরান।':tool==='text'?'লেখা লিখে পৃষ্ঠায় ট্যাপ করুন।':tool==='image'?'Add image চাপুন, তারপর ছবিটি নির্বাচন করুন।':'মূল PDF-এর লেখা ট্যাপ করে নির্বাচন করুন, অথবা যোগ করা লেখা/ছবি/কভার ট্যাপ করে সরান বা কপি করুন।'}</div>
       {selectedItem && <div className="pdf-selected-info">Selected: {selectedItem.type} · Page {selectedItem.page} {selectedItem.type === 'cover' && <><label style={{display:'inline-flex',alignItems:'center',gap:8,marginLeft:12}}>Cover colour <input aria-label="Cover colour" type="color" value={selectedItem.color || '#ffffff'} onChange={e=>setItems(old=>old.map(it=>it.id===selectedItem.id?{...it,color:e.target.value}:it))}/></label><button onClick={()=>{setTool('select');setSampleColorMode(true);setMessage('PDF-এর Cover-এর বাইরের যে জায়গার রং নিতে চান, সেখানে ট্যাপ করুন।')}}>PDF থেকে রং নিন</button></>} <button onClick={deleteSelected}>Remove</button></div>}
     </>}
     {message && <div className="pdf-editor-message">{message}</div>}
