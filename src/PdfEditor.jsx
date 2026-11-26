@@ -131,7 +131,7 @@ export default function PdfEditor() {
   const onPointerDown = (e) => {
     if (!pdfDoc || !wrapRef.current) return;
     const p = pointFromEvent(e);
-    if (sampleColorMode && selected) {
+    if (sampleColorMode && (selected || originalSelected)) {
       e.preventDefault();
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext('2d');
@@ -139,8 +139,13 @@ export default function PdfEditor() {
         try {
           const pixel = ctx.getImageData(Math.min(canvas.width - 1, Math.max(0, Math.floor(p.x * canvas.width))), Math.min(canvas.height - 1, Math.max(0, Math.floor(p.y * canvas.height))), 1, 1).data;
           const hex = '#' + [...pixel].slice(0, 3).map(v => v.toString(16).padStart(2, '0')).join('');
-          setItems(old => old.map(it => it.id === selected && it.type === 'cover' ? { ...it, color: hex } : it));
-          setMessage('PDF থেকে রং নেওয়া হয়েছে: ' + hex);
+          if (originalSelected) {
+            setOriginalTextColor(hex);
+            setMessage('PDF থেকে Text Color নেওয়া হয়েছে: ' + hex);
+          } else {
+            setItems(old => old.map(it => it.id === selected && it.type === 'cover' ? { ...it, color: hex } : it));
+            setMessage('PDF থেকে Cover Color নেওয়া হয়েছে: ' + hex);
+          }
         } catch (err) { setMessage('এই জায়গার রং নেওয়া যায়নি। আবার চেষ্টা করুন।'); }
       }
       setSampleColorMode(false);
@@ -343,6 +348,7 @@ export default function PdfEditor() {
         <b>মূল PDF লেখা নির্বাচন করেছেন</b>
         <input aria-label="Replace original PDF text" value={originalTextValue} onChange={e=>setOriginalTextValue(e.target.value)} placeholder="নতুন লেখা লিখুন"/>
         <label>Text color <input aria-label="Original text colour" type="color" value={originalTextColor} onChange={e=>setOriginalTextColor(e.target.value)}/></label>
+        <button type="button" onClick={()=>{setSampleColorMode(true);setMessage('PDF-এর যে জায়গার রং Text Color হিসেবে নিতে চান, সেখানে ট্যাপ করুন।');}}>PDF থেকে Text Color নিন</button>
         <label>Cover color <input aria-label="Background cover colour" type="color" value={originalCoverColor} onChange={e=>setOriginalCoverColor(e.target.value)}/></label>
         <label>Size <input type="number" min="8" max="72" value={originalFontSize} onChange={e=>setOriginalFontSize(Number(e.target.value)||8)}/></label>
         <button type="button" onClick={()=>applyOriginalTextEdit(false)}>রং পরিবর্তন / নতুন লেখা বসান</button>
